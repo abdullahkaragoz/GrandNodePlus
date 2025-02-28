@@ -1,0 +1,163 @@
+﻿@using Grand.Business.Core.Interfaces.Storage
+@using Grand.SharedKernel.Extensions
+@model string
+@inject IDownloadService downloadService
+@{
+    <link rel="stylesheet" type="text/css" asp-src="@(Grand.SharedUIResources.Constants.WwwRoot)/administration/fineuploader/fineuploader-4.2.2.min.css" />
+    <script asp-location="Footer" asp-src="@(Grand.SharedUIResources.Constants.WwwRoot)/administration/fineuploader/jquery.fineuploader-4.2.2.min.js"></script>
+    var area = ViewContext.RouteData.Values["area"]?.ToString();
+    var randomNumber = CommonHelper.GenerateRandomInteger();
+    var clientId = "download" + randomNumber;
+    var download = await downloadService.GetDownloadById(Model);
+
+    var disableUrl = Convert.ToBoolean(ViewData["Grand.DownloadEditor.DisableUrl"] ?? false);
+}
+
+<script>
+    $(document).ready(function() {
+        $('#cbUseDownloadURL@(randomNumber)').click(toggleDownloadRecordType@(randomNumber));
+
+        $('#saveDownloadUrl@(randomNumber)').click(function() {
+            var downloadUrl = $("#downloadurl@(randomNumber)").val();
+            $('#saveDownloadUrl@(randomNumber)').attr('disabled', true);
+            $.ajax({
+                cache: false,
+                type: "POST",
+                url: "@(Url.Action("SaveDownloadUrl", "Download", new { area }))",
+                data: { "downloadUrl": downloadUrl, DownloadType: '@ViewData["DownloadType"]', ReferenceId: '@ViewData["ReferenceId"]' },
+                success: function (data) {
+                    if (data.success) {
+                        $('#pnlDownloadURLResult@(randomNumber)').fadeIn("slow").delay(1000).fadeOut("slow");
+                        $("#@(clientId + "value") input").val(data.downloadId);
+                        $('#saveDownloadUrl@(randomNumber)').attr('disabled', false);
+                    }
+                    else {
+                        alert(data.error);
+                        $('#saveDownloadUrl@(randomNumber)').attr('disabled', false);
+                    }
+                },
+                error: function(xhr, ajaxOptions, thrownError) {
+                    alert('Failed to save download object.');
+                    $('#saveDownloadUrl@(randomNumber)').attr('disabled', false);
+                }
+            });
+        });
+
+        toggleDownloadRecordType@(randomNumber)();
+    });
+
+    function toggleDownloadRecordType@(randomNumber)() {
+        if ($('#cbUseDownloadURL@(randomNumber)').is(':checked')) {
+            $('#pnlDownloadURL@(randomNumber)').show();
+            $('#pnlDownloadFile@(randomNumber)').hide();
+        } else {
+            $('#pnlDownloadURL@(randomNumber)').hide();
+            $('#pnlDownloadFile@(randomNumber)').show();
+        }
+    }
+
+</script>
+<div id="@(clientId + "value")">
+    <input asp-for="@Model" type="hidden"/>
+</div>
+<div class="form-horizontal form-horizontal  portlet light bg-inverse form-bordered box green" style="border-top: 1px solid #5cd1db;">
+    <div class="form-body">
+        @if (!disableUrl)
+        {
+            <div class="form-group">
+                <div class="col-md-3 col-sm-3">
+                    @Loc["Admin.Download.UseDownloadURL"]:
+                </div>
+                <div class="col-md-6 col-sm-6">
+                    <label class="mt-checkbox mt-checkbox-outline control control-checkbox control control-checkbox">
+                        <input type="checkbox" class="check-box" name="cbUseDownloadURL@(randomNumber)" id="cbUseDownloadURL@(randomNumber)"
+                               @if (download is { UseDownloadUrl: true })
+                               {
+                                   <text> checked="checked" </text>
+                               }/>
+                        <div class="control__indicator"></div>
+                    </label>
+                </div>
+            </div>
+        }
+        <div class="form-group" id="pnlDownloadURL@(randomNumber)">
+            <div class="col-md-3 col-sm-3">
+                @Loc["Admin.Download.DownloadURL"]:
+            </div>
+            <div class="col-md-6 col-sm-6">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" name="downloadurl@(randomNumber)" id="downloadurl@(randomNumber)"
+                           @if (download != null && !string.IsNullOrEmpty(download.DownloadUrl))
+                           {
+                               <text> value="@(download.DownloadUrl)" </text>
+                           }/>
+                    <div class="input-group-append">
+                        <input type="button" id="saveDownloadUrl@(randomNumber)" class="k-button" value="@Loc["Admin.Download.SaveDownloadURL"]"/>
+                    </div>
+                </div>
+
+                <div id="pnlDownloadURLResult@(randomNumber)" style="display:none;">@Loc["Admin.Download.DownloadURLSaved"]</div>
+            </div>
+        </div>
+        <div class="form-group" id="pnlDownloadFile@(randomNumber)">
+            <div class="col-md-3 col-sm-3">
+                @Loc["Admin.Download.UploadFile"]:
+            </div>
+            <div class="col-md-6 col-sm-6">
+                <div>
+                    @*fine uploader container*@
+                    <div id="@clientId"></div>
+                    <div id="@(clientId)-qq-template" style="display: none;">
+                        <partial name="Partials/QqUploader" />
+                    </div>
+                    <script>
+
+                        $(document).ready(function () {
+                            $("#@clientId").fineUploader({
+                                request: {
+                                    endpoint: '@(Url.Action("AsyncUpload", "Download", new { area }))',
+                                    params: {
+                                        DownloadType: '@ViewData["DownloadType"]',
+                                        ReferenceId: '@ViewData["ReferenceId"]'
+                                    },
+                                    inputName: "file"
+                                },
+                                template: "@(clientId)-qq-template",
+                                multiple: false
+                            }).on("complete", function (event, id, name, responseJSON, xhr) {
+                                $("#@(clientId + "downloadurl")").html("<a href='" + responseJSON.downloadUrl + "' class=\"btn purple\">@Loc["Admin.Download.DownloadUploadedFile"]</a>");
+                                $("#@(clientId + "value") input").val(responseJSON.downloadId);
+                                $("#@(clientId + "remove")").show();
+                            });
+
+
+                            $("#@(clientId + "remove")").click(function (e) {
+                                $("#@(clientId + "downloadurl")").html("");
+                                $("#@(clientId + "value") input").val("");
+                                $(this).hide();
+                            });
+                        });
+
+                    </script>
+
+                </div>
+                <div id="@(clientId + "downloadurl")">
+                    @if (download != null)
+                    {
+                        <a href="@(Url.Action("DownloadFile", "Download", new { downloadGuid = download.DownloadGuid, area }))" class="btn purple">@Loc["Admin.Download.DownloadUploadedFile"]</a>
+                    }
+                </div>
+                <div>
+                    @if (download != null)
+                    {
+                        <span id="@(clientId + "remove")" class="k-button">@Loc["Admin.Download.RemoveDownload"]</span>
+                    }
+                    else
+                    {
+                        <span id="@(clientId + "remove")" class="k-button" style="display:none;">@Loc["Admin.Download.RemoveDownload"]</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
